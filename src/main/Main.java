@@ -30,13 +30,15 @@ public class Main {
     private static int vbo[] = new int[numVBOs];
     private static float cameraX, cameraY, cameraZ;
     private static float cubeLocX, cubeLocY, cubeLocZ;
-    private static float cubeRotX, cubeRotY, cubeRotZ;
+    private static float pyrLocX, pyrLocY, pyrLocZ;
     private static float test;
     
     //shader and display variables
-    private static int vLoc, projLoc;
+    private static int mvLoc, projLoc;
     private static IntBuffer width = BufferUtils.createIntBuffer(1);
 	private static IntBuffer height = BufferUtils.createIntBuffer(1);
+    private static int newWidth;
+    private static int newHeight;
     private static float aspect;
     private static Matrix4f pMat = new Matrix4f(), 
     vMat = new Matrix4f(), 
@@ -61,6 +63,14 @@ public class Main {
             -1.0f,  1.0f, -1.0f, 1.0f,  1.0f, -1.0f, 1.0f,  1.0f,  1.0f,
             1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f
         };
+        float pyramidPositions[] = {
+            -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f, 0.0f,    //front
+		    1.0f, -1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 0.0f, 1.0f, 0.0f,    //right
+		    1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 0.0f, 1.0f, 0.0f,  //back
+		    -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 1.0f, 0.0f,  //left
+		    -1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, //LF
+		    1.0f, -1.0f, 1.0f, -1.0f, -1.0f, -1.0f, 1.0f, -1.0f, -1.0f  //RR
+	    };
 
         glGenVertexArrays(vao);
         glBindVertexArray(vao[0]);
@@ -68,18 +78,20 @@ public class Main {
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
         glBufferData(GL_ARRAY_BUFFER, vertexPositions, GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+        glBufferData(GL_ARRAY_BUFFER, pyramidPositions, GL_STATIC_DRAW);
     }
     
     private static void init(long windowHandle) {
         renderingProgram = createShaderProgram("src/shaders/default.vert", "src/shaders/default.frag");
-        cameraX = 0.0f; cameraY = 0.0f; cameraZ = 395.0f;
-	    cubeLocX = 0.0f; cubeLocY = -2.0f; cubeLocZ = 0.0f;
-        cubeRotX = 0.0f; cubeRotY = 0.0f; cubeRotZ = 0.0f;
-
+        
         glfwGetFramebufferSize(windowHandle, width, height);
         aspect = (float)width.get(0) / (float)height.get(0);
-        pMat.setPerspective(Math.toRadians(90f), aspect, 0.1f, 1500.0f);
-
+        pMat.setPerspective(Math.toRadians(90f), aspect, 0.1f, 1000.0f);
+        
+        cameraX = 0.0f; cameraY = 0.0f; cameraZ = 8.0f;
+	    cubeLocX = 0.0f; cubeLocY = -2.0f; cubeLocZ = 0.0f;
+	    pyrLocX = 2.0f; pyrLocY = 2.0f; pyrLocZ = 0.0f;
 	    setupVertices();
         
     }
@@ -88,9 +100,10 @@ public class Main {
         glClearColor(0, 0, 0, 1);
         glClear(GL_DEPTH_BUFFER_BIT);
         glClear(GL_COLOR_BUFFER_BIT);
+
         glUseProgram(renderingProgram);
 
-        vLoc = glGetUniformLocation(renderingProgram, "v_matrix");
+        mvLoc = glGetUniformLocation(renderingProgram, "mv_matrix");
         projLoc = glGetUniformLocation(renderingProgram, "proj_matrix");
 
         vMat = new Matrix4f().translate(new Vector3f(-cameraX, -cameraY, -cameraZ));
@@ -98,14 +111,14 @@ public class Main {
         MemoryStack stack = MemoryStack.stackPush();
         FloatBuffer fb = stack.mallocFloat(16);  
 
-        vMat.get(0, fb);
-        glUniformMatrix4fv(vLoc, false, fb);
+        //draw cube
+        mMat = new Matrix4f().translate(new Vector3f(cubeLocX, cubeLocY, cubeLocZ));
+        vMat.mul(mMat, mvMat);
+
+        mvMat.get(0, fb);
+        glUniformMatrix4fv(mvLoc, false, fb);
         pMat.get(0, fb);
         glUniformMatrix4fv(projLoc, false, fb);
-
-        float timeFactor = (float)currentTime;
-        int tfLoc = glGetUniformLocation(renderingProgram, "tf");
-        glUniform1f(tfLoc, timeFactor);
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
         glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
@@ -114,9 +127,33 @@ public class Main {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LEQUAL);
 
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 36, 100000);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        //draw pyramid
+        mMat.translate(new Vector3f(pyrLocX, pyrLocY, pyrLocZ));
+        vMat.mul(mMat, mvMat);
+
+        mvMat.get(0, fb);
+        glUniformMatrix4fv(mvLoc, false, fb);
+        pMat.get(0, fb);
+        glUniformMatrix4fv(projLoc, false, fb);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+	    glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
+	    glEnableVertexAttribArray(0);
+
+        glEnable(GL_DEPTH_TEST);
+	    glDepthFunc(GL_LEQUAL);
+
+	    glDrawArrays(GL_TRIANGLES, 0, 18);
 
         stack.close();
+    }
+
+    public static void window_size_callback(long windowHandle, int newWidth, int newHeight) {
+        aspect = (float)width.get(0) / (float)height.get(0);
+        glViewport(0, 0, newWidth, newHeight);
+        pMat.setPerspective(Math.toRadians(90f), aspect, 0.1f, 1000.0f);
     }
 
     public static void main(String[] args) {
@@ -126,9 +163,15 @@ public class Main {
         windowHandle = glfwCreateWindow(1000, 1000, "chap4", NULL, NULL);
         if (windowHandle == NULL) {System.exit(-1);}
         glfwMakeContextCurrent(windowHandle);
-        GL.createCapabilities();  //super important lmao (lwjgl quirk)
+        GL.createCapabilities();  //super important (lwjgl thing)
         glfwSwapInterval(1);
         
+        glfwSetFramebufferSizeCallback(windowHandle, (window, width, height) -> {
+            aspect = (float)width / (float)height;
+            glViewport(0, 0, width, height);
+            pMat.setPerspective(Math.toRadians(90f), aspect, 0.1f, 1000.0f);
+        });
+
         init(windowHandle);
 
         while(!glfwWindowShouldClose(windowHandle)) {
