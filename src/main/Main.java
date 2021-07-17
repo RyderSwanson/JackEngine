@@ -13,6 +13,7 @@ import java.nio.IntBuffer;
 
 import org.joml.Math;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fStack;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 import org.joml.Vector3i;
@@ -31,7 +32,6 @@ public class Main {
     private static float cameraX, cameraY, cameraZ;
     private static float cubeLocX, cubeLocY, cubeLocZ;
     private static float pyrLocX, pyrLocY, pyrLocZ;
-    private static float test;
     
     //shader and display variables
     private static int mvLoc, projLoc;
@@ -46,6 +46,7 @@ public class Main {
     rMat = new Matrix4f(),
     mMat = new Matrix4f(), 
     mvMat = new Matrix4f();
+    private static Matrix4fStack mvStack = new Matrix4fStack(10);
     
     
     private static void setupVertices() {
@@ -89,16 +90,14 @@ public class Main {
         aspect = (float)width.get(0) / (float)height.get(0);
         pMat.setPerspective(Math.toRadians(90f), aspect, 0.1f, 1000.0f);
         
-        cameraX = 0.0f; cameraY = 0.0f; cameraZ = 8.0f;
-	    cubeLocX = 0.0f; cubeLocY = -2.0f; cubeLocZ = 0.0f;
-	    pyrLocX = 2.0f; pyrLocY = 2.0f; pyrLocZ = 0.0f;
+        cameraX = 0.0f; cameraY = 0.0f; cameraZ = 12.0f;
 	    setupVertices();
         
     }
     
     private static void display(long windowHandle, double currentTime) {
-        glClearColor(0, 0, 0, 1);
         glClear(GL_DEPTH_BUFFER_BIT);
+        glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(renderingProgram);
@@ -107,54 +106,76 @@ public class Main {
         projLoc = glGetUniformLocation(renderingProgram, "proj_matrix");
 
         vMat = new Matrix4f().translate(new Vector3f(-cameraX, -cameraY, -cameraZ));
+        mvStack.set(vMat);
         
         MemoryStack stack = MemoryStack.stackPush();
         FloatBuffer fb = stack.mallocFloat(16);  
 
-        //draw cube
-        mMat = new Matrix4f().translate(new Vector3f(cubeLocX, cubeLocY, cubeLocZ));
-        vMat.mul(mMat, mvMat);
-
-        mvMat.get(0, fb);
-        glUniformMatrix4fv(mvLoc, false, fb);
         pMat.get(0, fb);
         glUniformMatrix4fv(projLoc, false, fb);
+        
+        glEnable(GL_CULL_FACE);
 
-        glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-        glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
-        glEnableVertexAttribArray(0);
-
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LEQUAL);
-
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-
-        //draw pyramid
-        mMat.translate(new Vector3f(pyrLocX, pyrLocY, pyrLocZ));
-        vMat.mul(mMat, mvMat);
-
-        mvMat.get(0, fb);
+        //draw pyramid sun
+        mvStack.pushMatrix();
+        mvStack.translate(new Vector3f(0.0f, 0.0f, 0.0f));
+        mvStack.pushMatrix();
+        mvStack.rotateXYZ(new Vector3f((float)currentTime,0.0f,0.0f));
+        mvStack.get(0, fb);
         glUniformMatrix4fv(mvLoc, false, fb);
-        pMat.get(0, fb);
-        glUniformMatrix4fv(projLoc, false, fb);
-
         glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
 	    glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
 	    glEnableVertexAttribArray(0);
-
         glEnable(GL_DEPTH_TEST);
 	    glDepthFunc(GL_LEQUAL);
-
+        glFrontFace(GL_CCW);
 	    glDrawArrays(GL_TRIANGLES, 0, 18);
+        mvStack.popMatrix();
+
+        //draw cube planet
+        mvStack.pushMatrix();
+        mvStack.translate(new Vector3f(Math.sin((float)currentTime)*4.0f, 0.0f, Math.cos((float)currentTime)*4.0f));
+        mvStack.pushMatrix();
+        mvStack.rotateXYZ(new Vector3f(0.0f, (float)currentTime, 0.0f));
+        mvStack.get(0, fb);
+        glUniformMatrix4fv(mvLoc, false, fb);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+        glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
+        glEnableVertexAttribArray(0);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL);
+        glFrontFace(GL_CW);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        mvStack.popMatrix();
+
+        //draw cube moon
+        mvStack.pushMatrix();
+        mvStack.translate(new Vector3f(Math.cos((float)currentTime)*2.0f, Math.sin((float)currentTime)*2.0f, 0.0f));
+        mvStack.rotateXYZ(new Vector3f(0.0f, 0.0f, (float)currentTime*2.0f));
+        mvStack.scale(new Vector3f(0.25f, 0.25f, 0.25f));
+        mvStack.get(0, fb);
+        glUniformMatrix4fv(mvLoc, false, fb);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+        glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
+        glEnableVertexAttribArray(0);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL);
+        glFrontFace(GL_CW);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        mvStack.popMatrix(); mvStack.popMatrix(); mvStack.popMatrix();
+
 
         stack.close();
     }
 
-    public static void window_size_callback(long windowHandle, int newWidth, int newHeight) {
-        aspect = (float)width.get(0) / (float)height.get(0);
-        glViewport(0, 0, newWidth, newHeight);
-        pMat.setPerspective(Math.toRadians(90f), aspect, 0.1f, 1000.0f);
-    }
+    private static GLFWFramebufferSizeCallback window_size_callback = new GLFWFramebufferSizeCallback() {
+        @Override
+        public void invoke(long windowHandle, final int width, final int height) {
+            aspect = (float)width / (float)height;
+            glViewport(0, 0, width, height);
+            pMat.setPerspective(Math.toRadians(90f), aspect, 0.1f, 1000.0f);
+        }
+    };
 
     public static void main(String[] args) {
         if (!glfwInit()) {System.exit(-1);}
@@ -163,14 +184,10 @@ public class Main {
         windowHandle = glfwCreateWindow(1000, 1000, "chap4", NULL, NULL);
         if (windowHandle == NULL) {System.exit(-1);}
         glfwMakeContextCurrent(windowHandle);
-        GL.createCapabilities();  //super important (lwjgl thing)
+        GL.createCapabilities();  //super important lwjgl thing
         glfwSwapInterval(1);
         
-        glfwSetFramebufferSizeCallback(windowHandle, (window, width, height) -> {
-            aspect = (float)width / (float)height;
-            glViewport(0, 0, width, height);
-            pMat.setPerspective(Math.toRadians(90f), aspect, 0.1f, 1000.0f);
-        });
+        glfwSetFramebufferSizeCallback(windowHandle, window_size_callback);
 
         init(windowHandle);
 
