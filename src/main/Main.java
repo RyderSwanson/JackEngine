@@ -1,6 +1,8 @@
 package main;
 
 import org.lwjgl.system.MemoryStack;
+
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.glfw.*;
@@ -10,6 +12,8 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.opengl.GL46.*;
 import static tools.Utils.*;
 import java.nio.IntBuffer;
+import org.lwjgl.stb.STBImage;
+import static org.lwjgl.stb.STBImage.*;
 
 import org.joml.Math;
 import org.joml.Matrix4f;
@@ -25,7 +29,7 @@ public class Main {
 
     private static long windowHandle;
     private static int numVAOs = 1;
-    private static int numVBOs = 2;
+    private static int numVBOs = 3;
     private static int renderingProgram;
     private static int vao[] = new int[numVAOs];
     private static int vbo[] = new int[numVBOs];
@@ -34,7 +38,7 @@ public class Main {
     private static float pyrLocX, pyrLocY, pyrLocZ;
     
     //shader and display variables
-    private static int mvLoc, projLoc;
+    private static int mvLoc, projLoc, doTextureLoc;
     private static IntBuffer width = BufferUtils.createIntBuffer(1);
 	private static IntBuffer height = BufferUtils.createIntBuffer(1);
     private static int newWidth;
@@ -47,8 +51,9 @@ public class Main {
     mMat = new Matrix4f(), 
     mvMat = new Matrix4f();
     private static Matrix4fStack mvStack = new Matrix4fStack(10);
-    
-    
+
+    private static int testimg, meemee;
+
     private static void setupVertices() {
         float vertexPositions[] = {
             -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f, -1.0f, -1.0f,
@@ -72,6 +77,14 @@ public class Main {
 		    -1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, //LF
 		    1.0f, -1.0f, 1.0f, -1.0f, -1.0f, -1.0f, 1.0f, -1.0f, -1.0f  //RR
 	    };
+        float textureCoordinates[] ={
+            0.0f, 0.0f, 1.0f, 0.0f, 0.5f, 1.0f,
+            0.0f, 0.0f, 1.0f, 0.0f, 0.5f, 1.0f,
+            0.0f, 0.0f, 1.0f, 0.0f, 0.5f, 1.0f,
+            0.0f, 0.0f, 1.0f, 0.0f, 0.5f, 1.0f,
+            0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f,
+            1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f
+        };
 
         glGenVertexArrays(vao);
         glBindVertexArray(vao[0]);
@@ -81,29 +94,34 @@ public class Main {
         glBufferData(GL_ARRAY_BUFFER, vertexPositions, GL_STATIC_DRAW);
         glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
         glBufferData(GL_ARRAY_BUFFER, pyramidPositions, GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+        glBufferData(GL_ARRAY_BUFFER, textureCoordinates, GL_STATIC_DRAW);    
     }
     
     private static void init(long windowHandle) {
         renderingProgram = createShaderProgram("src/shaders/default.vert", "src/shaders/default.frag");
-        
+        cameraX = 0.0f; cameraY = 0.0f; cameraZ = 5.7f;
+	    setupVertices();
+
         glfwGetFramebufferSize(windowHandle, width, height);
         aspect = (float)width.get(0) / (float)height.get(0);
-        pMat.setPerspective(Math.toRadians(90f), aspect, 0.1f, 1000.0f);
+        pMat.setPerspective(Math.toRadians(140f), aspect, 0.1f, 1000.0f);
         
-        cameraX = 0.0f; cameraY = 0.0f; cameraZ = 12.0f;
-	    setupVertices();
-        
+        //scetchy code
+        testimg = loadImage("E:/Games/My games/JackEngineI/resources/ice.png");
+        meemee = loadImage("E:/Games/My games/JackEngineI/resources/index.png");
     }
     
     private static void display(long windowHandle, double currentTime) {
         glClear(GL_DEPTH_BUFFER_BIT);
-        glClearColor(0, 0, 0, 1);
+        glClearColor(0.1f, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(renderingProgram);
 
         mvLoc = glGetUniformLocation(renderingProgram, "mv_matrix");
         projLoc = glGetUniformLocation(renderingProgram, "proj_matrix");
+        doTextureLoc = glGetUniformLocation(renderingProgram, "doTexture");
 
         vMat = new Matrix4f().translate(new Vector3f(-cameraX, -cameraY, -cameraZ));
         mvStack.set(vMat);
@@ -123,9 +141,19 @@ public class Main {
         mvStack.rotateXYZ(new Vector3f((float)currentTime,0.0f,0.0f));
         mvStack.get(0, fb);
         glUniformMatrix4fv(mvLoc, false, fb);
+        //enable texture
+        glUniform1i(doTextureLoc, 1);
         glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
 	    glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
 	    glEnableVertexAttribArray(0);
+
+        //insert texture stuff
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+        glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, 0); //not sure about the 2nd vao but thats what they did
+	    glEnableVertexAttribArray(1);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, testimg);
+
         glEnable(GL_DEPTH_TEST);
 	    glDepthFunc(GL_LEQUAL);
         glFrontFace(GL_CCW);
@@ -139,6 +167,7 @@ public class Main {
         mvStack.rotateXYZ(new Vector3f(0.0f, (float)currentTime, 0.0f));
         mvStack.get(0, fb);
         glUniformMatrix4fv(mvLoc, false, fb);
+        glUniform1i(doTextureLoc, 0);
         glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
         glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
         glEnableVertexAttribArray(0);
@@ -155,15 +184,22 @@ public class Main {
         mvStack.scale(new Vector3f(0.25f, 0.25f, 0.25f));
         mvStack.get(0, fb);
         glUniformMatrix4fv(mvLoc, false, fb);
+        glUniform1i(doTextureLoc, 1);
         glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
         glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
         glEnableVertexAttribArray(0);
+        //insert texture stuff
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+        glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, 0); //not sure about the 2nd vao but thats what they did
+	    glEnableVertexAttribArray(1);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, meemee);
+
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LEQUAL);
         glFrontFace(GL_CW);
         glDrawArrays(GL_TRIANGLES, 0, 36);
         mvStack.popMatrix(); mvStack.popMatrix(); mvStack.popMatrix();
-
 
         stack.close();
     }

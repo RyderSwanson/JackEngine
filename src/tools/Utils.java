@@ -2,8 +2,14 @@ package tools;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.lwjgl.stb.STBImage;
+import static org.lwjgl.stb.STBImage.*;
+
+import org.lwjgl.BufferUtils;
 
 import static org.lwjgl.opengl.GL46.*;
 
@@ -80,4 +86,50 @@ public class Utils {
     public static void printProgramLog(int program) {
         System.err.println(glGetProgramInfoLog(program));
     }
+
+    public static int loadImage(String imgLocation) {
+        IntBuffer xBuffer= BufferUtils.createIntBuffer(1);
+        IntBuffer yBuffer= BufferUtils.createIntBuffer(1);
+        IntBuffer channelsBuffer= BufferUtils.createIntBuffer(1);
+        ByteBuffer image = stbi_load(imgLocation, xBuffer, yBuffer, channelsBuffer, STBI_default);
+        if (image == null){
+            System.out.println("failed to load image: " + imgLocation +". "+ STBImage.stbi_failure_reason());
+        }
+        int width = xBuffer.get();
+        int height = yBuffer.get();
+
+        //create a new opengl texture
+        int textureId = glGenTextures();
+        //bind the texture
+        glBindTexture(GL_TEXTURE_2D, textureId);
+
+        //tell opengl how to unpack the rgba bytes
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        //upload the texture data
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+
+        //generate mip map
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        stbi_image_free(image);
+
+        return textureId;
+    }
+
+    // public static ByteBuffer decodeImage(String imgLocation) {
+    //     //String imageLocation = new String("E:/Games/My games/JackEngineI/resources/ghghhg.png");
+
+    //     IntBuffer xBuffer= BufferUtils.createIntBuffer(1);
+    //     IntBuffer yBuffer= BufferUtils.createIntBuffer(1);
+    //     IntBuffer channelsBuffer= BufferUtils.createIntBuffer(1);
+    //     ByteBuffer image = stbi_load(imgLocation, xBuffer, yBuffer, channelsBuffer, STBI_default);
+    //     if (image == null){
+    //         System.out.println("failed to load image: " + imgLocation +". "+ STBImage.stbi_failure_reason());
+    //     }
+    //     return image;
+    // }
 }
